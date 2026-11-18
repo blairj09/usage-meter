@@ -1,6 +1,4 @@
-<p align="center">
-  <img src=".claude-plugin/icon.png" alt="usage-meter logo: a budget gauge with amber and red warning zones" width="160">
-</p>
+<img src=".claude-plugin/icon.png" alt="usage-meter logo: a budget gauge with amber and red warning zones" width="120" align="right">
 
 # usage-meter
 
