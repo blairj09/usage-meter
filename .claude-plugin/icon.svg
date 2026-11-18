@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- usage-meter: a budget gauge. The arc's zones mark the 75% and 90% warning points; the bar echoes the band above the prompt. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="#1A202A"/>
+
+  <!-- gauge track: blue to 74%, amber 76-88.5%, red 90.5-100% -->
+  <g fill="none" stroke-width="72" stroke-linecap="butt">
+    <path d="M 212 600 A 300 300 0 0 1 717.35 381.30" stroke="#5AA2F5"/>
+    <path d="M 730.70 394.65 A 300 300 0 0 1 792.62 493.95" stroke="#F2B84B"/>
+    <path d="M 798.74 511.80 A 300 300 0 0 1 812 600" stroke="#E5604D"/>
+  </g>
+
+  <!-- needle at 45% -->
+  <polygon points="533.73,596.56 490.27,603.44 472.9,353.1" fill="#F4F6FA"/>
+  <circle cx="512" cy="600" r="46" fill="#F4F6FA"/>
+  <circle cx="512" cy="600" r="18" fill="#1B222C"/>
+
+  <!-- the band's bar, 45% filled -->
+  <rect x="262" y="752" width="500" height="40" rx="20" fill="#2E3846"/>
+  <rect x="262" y="752" width="225" height="40" rx="20" fill="#5AA2F5"/>
+</svg>

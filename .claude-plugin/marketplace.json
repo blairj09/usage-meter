@@ -1,11 +1,14 @@
 {
   "name": "usage-meter",
-  "owner": { "name": "James Blair" },
+  "description": "usage-meter, a Claude Code mod for session cost and monthly extra usage",
+  "owner": {
+    "name": "James Blair"
+  },
   "plugins": [
     {
       "name": "usage-meter",
       "source": "./",
-      "description": "Shows session cost, context fill and monthly extra usage against its limit above the prompt, with a short burn-rate forecast"
+      "description": "Shows session cost and monthly extra usage against its limit above the prompt, with a short burn-rate forecast"
     }
   ]
 }
