@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".claude-plugin/icon.png" alt="usage-meter logo: a budget gauge with amber and red warning zones" width="160">
+</p>
+
 # usage-meter
 
 A Claude Code mod that shows your usage in a row above the prompt:
