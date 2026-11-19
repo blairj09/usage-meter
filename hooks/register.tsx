@@ -43,7 +43,8 @@ const winName = (w: { name?: string; kind?: string; label?: string }) => w.label
 type Window = NonNullable<Plan['windows']>[number]
 // The plan's 5-hour and all-models weekly windows, by kind, else by label. Per-model weekly windows are left out.
 const fiveHour = (ws: Window[]) => ws.find(w => w.kind === 'five_hour') ?? ws.find(w => /\b5\s*-?\s*h/i.test(winName(w)))
-const weekly = (ws: Window[]) => ws.find(w => w.kind === 'seven_day') ?? ws.find(w => /week|\b7\s*-?\s*d/i.test(winName(w)) && !/opus|sonnet|haiku|fable|model/i.test(winName(w)))
+// A per-model window names its model ("Weekly · Opus"); the all-models one may say "All models", so "model" alone does not rule a window out
+const weekly = (ws: Window[]) => ws.find(w => w.kind === 'seven_day') ?? ws.find(w => /week|\b7\s*-?\s*d/i.test(`${winName(w)} ${w.name ?? ''} ${w.kind ?? ''}`) && !/opus|sonnet|haiku|fable/i.test(`${winName(w)} ${w.name ?? ''} ${w.kind ?? ''}`))
 // A limit's bar turns yellow at 75% and red at 90%
 const limitColor = (pct: number) => (pct >= 90 ? 'red' : pct >= 75 ? 'yellow' : undefined)
 
@@ -123,8 +124,11 @@ async function refresh($: any): Promise<boolean> {
   const app = await appPlan($)
   const s = await sessionPlan($)
   const x = app?.extraUsage
-  // The app's windows, else the ones the session's last response reported (in a terminal the app's tool is not there)
-  const windows = (app?.windows?.length ? app.windows : s.plan.windows ?? []).filter(w => w.percentUsed !== undefined)
+  // The app's windows, then the ones the session's last response reported (in a terminal the app's tool is not there).
+  // Each limit is looked up in both, so one the app's list lacks or names differently still shows.
+  const has = (w: Window) => w.percentUsed !== undefined
+  const appWindows = (app?.windows ?? []).filter(has)
+  const sessionWindows = (s.plan.windows ?? []).filter(has)
   const next: Band = {
     session: s.cost !== undefined ? `$${s.cost.toFixed(2)}` : '',
     meters: [],
@@ -132,7 +136,10 @@ async function refresh($: any): Promise<boolean> {
     tone: 'calm',
   }
   // A subscription has 5-hour and weekly limits: show how much of each is used
-  const limits = [['five', '5h', fiveHour(windows)], ['week', 'week', weekly(windows)]] as const
+  const limits = [
+    ['five', '5h', fiveHour(appWindows) ?? fiveHour(sessionWindows)],
+    ['week', 'week', weekly(appWindows) ?? weekly(sessionWindows)],
+  ] as const
   for (const [key, label, w] of limits) {
     if (w) next.meters.push({ key, label, percent: w.percentUsed!, text: `${Math.round(w.percentUsed!)}%`, color: limitColor(w.percentUsed!) })
   }

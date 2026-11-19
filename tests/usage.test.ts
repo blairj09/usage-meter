@@ -67,6 +67,26 @@ test('a subscription shows its 5-hour and weekly use as bars, and no budget or f
   expect(toasts).toEqual([])
 })
 
+test('the weekly bar shows when the app names it "All models", and per-model limits stay out', async ($, on) => {
+  stubs(on, SUB([
+    { name: 'Current session', percentUsed: 13, kind: 'five_hour' },
+    { name: 'Weekly · Opus', label: 'Opus', percentUsed: 70 },
+    { name: 'Weekly', label: 'All models', percentUsed: 22 },
+  ]))
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'right', text: /^week.*22%$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '70%' })).toBeUndefined()
+})
+
+test('a weekly limit missing from the app\'s list comes from the session', async ($, on) => {
+  stubs(on, SUB([{ kind: 'five_hour', percentUsed: 13 }]), [{ kind: 'five_hour', percentUsed: 13 }, { kind: 'seven_day', percentUsed: 30 }])
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'middle', text: /^5h.*13%$/ })).toBeDefined()
+  expect(await ui.find({ key: 'right', text: /^week.*30%$/ })).toBeDefined()
+})
+
 test('a subscription in a terminal draws both limits in block characters', async ($, on) => {
   stubs(on, SUB([{ kind: 'five_hour', percentUsed: 92 }, { kind: 'seven_day', percentUsed: 10 }]))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/w' })
