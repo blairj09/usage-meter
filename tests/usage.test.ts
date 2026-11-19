@@ -32,7 +32,7 @@ test('without the app tool the band falls back to figures from the session itsel
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/w' })
   const ui = await $.ui.mount({ plugin: 'usage-meter', component: 'AbovePrompt', surface: 'terminal', viewport: { columns: 100, rows: 30 }, props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 90, scroll: { offset: 0, bodyRows: 4 }, view: {} } } as any)
   // The session's cost at the left, and the subscription's two limits as bars in the middle
-  expect(await ui.find({ key: 'left', text: '$1.23' })).toBeDefined()
+  expect(await ui.find({ key: 'left', text: '$1.23 at API rates' })).toBeDefined()
   expect(await ui.find({ key: 'five', text: /^5h.*12%$/ })).toBeDefined()
   expect(await ui.find({ key: 'week', text: /^week.*41%$/ })).toBeDefined()
   // The context figure is gone: Claude reports it already
@@ -54,6 +54,10 @@ test('a subscription shows its 5-hour and weekly use as bars, and no budget or f
   // The 5-hour bar in the middle of the band, the weekly one at the right edge
   expect(await ui.find({ key: 'middle', text: /^5h.*82%$/ })).toBeDefined()
   expect(await ui.find({ key: 'right', text: /^week.*40%$/ })).toBeDefined()
+  // The cost is not billed on a subscription: it is labelled, and fainter than the bars
+  const cost: any = await ui.find({ type: 'Text', text: '$1.23 at API rates' })
+  expect(cost.props.color).toBe('inactive')
+  expect(cost.props.dimColor).toBe(true)
   // Per-model weekly limits are left out
   expect(await ui.find({ type: 'Text', text: '95%' })).toBeUndefined()
   // The 5-hour bar is yellow past 75%; the weekly one keeps the theme's fill
@@ -103,8 +107,10 @@ test('the band shows session and month with a slim bar on desktop', async ($, on
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
   const ui = await $.ui.mount(BAND)
   // The session's cost alone at the left, with no "session" label
-  expect(await ui.find({ type: 'Text', text: '$1.23' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /session/ })).toBeUndefined()
+  // On a budget plan the cost is what is billed: no label, the usual dim text
+  const cost: any = await ui.find({ type: 'Text', text: '$1.23' })
+  expect(cost.props.color).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /session|API/ })).toBeUndefined()
   // The bar's label is a month's name, not the word "month"
   expect(await ui.find({ type: 'Text', text: /^(January|February|March|April|May|June|July|August|September|October|November|December)$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'month' })).toBeUndefined()

@@ -25,6 +25,8 @@ type Meter = { key: string; label: string; percent: number; text: string; color?
 type Band = {
   // This session's cost, "$1.15"
   session: string
+  // On a subscription the cost is not billed: it reads "$1.15 at API rates", fainter than the bars
+  faint?: boolean
   // On a budget plan, one bar: the month's name and what is left, "November ▬▬ $410.25 left of $750.00".
   // On a subscription, two: "5h ▬▬ 12%" in the middle and "week ▬▬ 40%" at the right edge.
   meters: Meter[]
@@ -134,6 +136,11 @@ async function refresh($: any): Promise<boolean> {
   for (const [key, label, w] of limits) {
     if (w) next.meters.push({ key, label, percent: w.percentUsed!, text: `${Math.round(w.percentUsed!)}%`, color: limitColor(w.percentUsed!) })
   }
+  // A subscription is not billed by the token: the cost is what the session would have cost at API prices, so say so
+  if (next.meters.length && next.session) {
+    next.session += ' at API rates'
+    next.faint = true
+  }
   // A budget plan has no such limits, only the month's budget: show what is left of it
   const budget = !next.meters.length && x?.enabled && x.percentUsed !== undefined ? x : undefined
   if (budget) {
@@ -239,7 +246,7 @@ export const register: Register = on => {
         {theirs}
         <Box flexDirection="row" width="100%" columnGap={2} alignItems="center">
           <Box key="left" flexDirection="row" flexGrow={1} width={0}>
-            {b.session && <Text dimColor wrap="truncate-end">{b.session}</Text>}
+            {b.session && <Text dimColor color={b.faint ? 'inactive' : undefined} wrap="truncate-end">{b.session}</Text>}
           </Box>
           {middle.length > 0 && (
             <Box key="middle" flexDirection="row" columnGap={3} flexShrink={0} alignItems="center">
