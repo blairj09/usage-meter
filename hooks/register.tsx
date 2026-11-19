@@ -26,7 +26,7 @@ type Band = {
   // This session's cost, "$1.15"
   session: string
   // On a budget plan, one bar: the month's name and what is left, "November ▬▬ $410.25 left of $750.00".
-  // On a subscription, two: "5h ▬▬ 12%" and "week ▬▬ 40%".
+  // On a subscription, two: "5h ▬▬ 12%" in the middle and "week ▬▬ 40%" at the right edge.
   meters: Meter[]
   // Budget plans only: "$13/day", or "$42/day · runs out Oct 18" when the budget will run out before the month ends
   forecast: string
@@ -214,7 +214,25 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const theirs = await next(e)
     const color = toneColor(b.tone)
-    // Three columns: the session on the left, the bars in the middle of the band, the daily rate on the right.
+    const bar = (m: Meter) => (
+      <Box key={m.key} flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
+        <Text dimColor>{m.label}</Text>
+        {e.surface === 'terminal' ? (
+          // A terminal draws block characters cleanly
+          <Text dimColor={!m.color} color={m.color}>{meter(m.percent)}</Text>
+        ) : (
+          // Elsewhere the characters draw as hatched boxes in the app's font: a slim bar of two Boxes, in the theme's track and fill
+          <Box key="meter" width={10} height={0.4} flexShrink={0} backgroundColor="userMessageBackground">
+            <Box width={`${Math.max(0, Math.min(m.percent, 100))}%`} height={0.4} backgroundColor={m.color ?? 'suggestion'} />
+          </Box>
+        )}
+        <Text dimColor>{m.text}</Text>
+      </Box>
+    )
+    // A subscription's weekly bar sits at the right edge, where a budget plan has its daily rate
+    const week = b.meters.find(m => m.key === 'week')
+    const middle = b.meters.filter(m => m !== week)
+    // Three columns: the session on the left, the month's or the 5-hour bar in the middle of the band, the daily rate or the weekly bar on the right.
     // The two sides grow from zero width alike, so the middle column sits at the band's center whatever their text.
     return (
       <Box flexDirection="column">
@@ -223,27 +241,13 @@ export const register: Register = on => {
           <Box key="left" flexDirection="row" flexGrow={1} width={0}>
             {b.session && <Text dimColor wrap="truncate-end">{b.session}</Text>}
           </Box>
-          {b.meters.length > 0 && (
+          {middle.length > 0 && (
             <Box key="middle" flexDirection="row" columnGap={3} flexShrink={0} alignItems="center">
-              {b.meters.map(m => (
-                <Box key={m.key} flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
-                  <Text dimColor>{m.label}</Text>
-                  {e.surface === 'terminal' ? (
-                    // A terminal draws block characters cleanly
-                    <Text dimColor={!m.color} color={m.color}>{meter(m.percent)}</Text>
-                  ) : (
-                    // Elsewhere the characters draw as hatched boxes in the app's font: a slim bar of two Boxes, in the theme's track and fill
-                    <Box key="meter" width={10} height={0.4} flexShrink={0} backgroundColor="userMessageBackground">
-                      <Box width={`${Math.max(0, Math.min(m.percent, 100))}%`} height={0.4} backgroundColor={m.color ?? 'suggestion'} />
-                    </Box>
-                  )}
-                  <Text dimColor>{m.text}</Text>
-                </Box>
-              ))}
+              {middle.map(bar)}
             </Box>
           )}
           <Box key="right" flexDirection="row" flexGrow={1} width={0} justifyContent="flex-end">
-            {b.forecast && <Text color={color} dimColor={b.tone === 'calm'} wrap="truncate-end">{b.forecast}</Text>}
+            {week ? bar(week) : b.forecast && <Text color={color} dimColor={b.tone === 'calm'} wrap="truncate-end">{b.forecast}</Text>}
           </Box>
         </Box>
       </Box>

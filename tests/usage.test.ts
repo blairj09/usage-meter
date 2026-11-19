@@ -51,6 +51,9 @@ test('a subscription shows its 5-hour and weekly use as bars, and no budget or f
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ key: 'five', text: /^5h.*82%$/ })).toBeDefined()
   expect(await ui.find({ key: 'week', text: /^week.*40%$/ })).toBeDefined()
+  // The 5-hour bar in the middle of the band, the weekly one at the right edge
+  expect(await ui.find({ key: 'middle', text: /^5h.*82%$/ })).toBeDefined()
+  expect(await ui.find({ key: 'right', text: /^week.*40%$/ })).toBeDefined()
   // Per-model weekly limits are left out
   expect(await ui.find({ type: 'Text', text: '95%' })).toBeUndefined()
   // The 5-hour bar is yellow past 75%; the weekly one keeps the theme's fill
