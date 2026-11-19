@@ -8,7 +8,7 @@
     {
       "name": "usage-meter",
       "source": "./",
-      "description": "Shows session cost and monthly extra usage against its limit above the prompt, with a short burn-rate forecast"
+      "description": "Shows session cost above the prompt, with the monthly budget left on budget plans or 5-hour and weekly use on subscriptions"
     }
   ]
 }
