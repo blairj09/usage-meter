@@ -79,6 +79,19 @@ test('the weekly bar shows when the app names it "All models", and per-model lim
   expect(await ui.find({ type: 'Text', text: '70%' })).toBeUndefined()
 })
 
+test('a Pro plan as the app reports it shows the 5-hour and all-models weekly limits', async ($, on) => {
+  stubs(on, SUB([
+    { label: '5-hour limit', percentUsed: 18, resetsAt: '2026-11-19T18:30:00.842Z', resetsIn: '42m' },
+    { label: 'Weekly · all models', percentUsed: 28, resetsAt: '2026-11-22T20:00:00.842Z', resetsIn: '3d 2h' },
+    { label: 'Weekly · Fable', percentUsed: 0, resetsAt: '2026-11-22T20:00:00.000Z', resetsIn: '3d 2h' },
+  ], { enabled: false, percentUsed: 0, spent: '0.00', monthlyLimit: '50.00', currency: 'USD' }))
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'left', text: '$1.23 at API rates' })).toBeDefined()
+  expect(await ui.find({ key: 'middle', text: /^5h.*18%$/ })).toBeDefined()
+  expect(await ui.find({ key: 'right', text: /^week.*28%$/ })).toBeDefined()
+})
+
 test('a weekly limit missing from the app\'s list comes from the session', async ($, on) => {
   stubs(on, SUB([{ kind: 'five_hour', percentUsed: 13 }]), [{ kind: 'five_hour', percentUsed: 13 }, { kind: 'seven_day', percentUsed: 30 }])
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
