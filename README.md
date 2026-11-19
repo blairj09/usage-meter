@@ -1,8 +1,8 @@
+<img src="docs/band.png" alt="The usage-meter band: $4.27 for the session at the left, November's bar at 38% with $286.40 / $750.00 in the middle, and $12/day at the right">
+
 # usage-meter <img src=".claude-plugin/icon.png" align="right" width="120" alt="" />
 
-A Claude Code mod that shows your usage in a row above the prompt:
-
-<img src="docs/band.png" alt="The usage-meter band: $4.27 for the session at the left, November's bar at 38% with $286.40 / $750.00 in the middle, and $12/day at the right">
+A Claude Code mod that shows your usage in a row above the prompt.
 
 - **Session cost** at the left: what the current session has cost so far.
 - **Monthly extra usage** against its limit, with a slim bar (block characters in a terminal).
