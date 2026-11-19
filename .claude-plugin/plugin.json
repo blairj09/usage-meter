@@ -1,1 +1,1 @@
-{"name": "usage-meter", "version": "0.2.0", "description": "Shows session cost and monthly extra usage against its limit above the prompt, with a short burn-rate forecast", "license": "MIT", "icon": "./.claude-plugin/icon.png", "author": {"name": "James Blair"}}
+{"name": "usage-meter", "version": "0.3.0", "description": "Shows session cost above the prompt, with the monthly budget left on budget plans or 5-hour and weekly use on subscriptions", "license": "MIT", "icon": "./.claude-plugin/icon.png", "author": {"name": "James Blair"}}

@@ -31,9 +31,42 @@ test('without the app tool the band falls back to figures from the session itsel
   stubs(on, null, [{ kind: 'five_hour', percentUsed: 12 }, { kind: 'seven_day', percentUsed: 40.5 }])
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/w' })
   const ui = await $.ui.mount({ plugin: 'usage-meter', component: 'AbovePrompt', surface: 'terminal', viewport: { columns: 100, rows: 30 }, props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 90, scroll: { offset: 0, bodyRows: 4 }, view: {} } } as any)
-  expect(await ui.find({ type: 'Text', text: '$1.23 · 5h 12% · 7d 40.5%' })).toBeDefined()
+  // The session's cost at the left, and the subscription's two limits as bars in the middle
+  expect(await ui.find({ key: 'left', text: '$1.23' })).toBeDefined()
+  expect(await ui.find({ key: 'five', text: /^5h.*12%$/ })).toBeDefined()
+  expect(await ui.find({ key: 'week', text: /^week.*41%$/ })).toBeDefined()
   // The context figure is gone: Claude reports it already
   expect(await ui.find({ type: 'Text', text: /context/ })).toBeUndefined()
+})
+
+const SUB = (windows: any[], extraUsage?: any) => ({ content: [{ type: 'text', text: JSON.stringify({ plan: { plan: 'Max', windows, extraUsage } }) }], isError: false })
+
+test('a subscription shows its 5-hour and weekly use as bars, and no budget or forecast', async ($, on) => {
+  const { toasts } = stubs(on, SUB(
+    [{ kind: 'five_hour', percentUsed: 82 }, { kind: 'seven_day', percentUsed: 40 }, { kind: 'seven_day_opus', label: 'Weekly (Opus)', percentUsed: 95 }],
+    // Extra usage on a subscription only begins when the limits run out: the limits are what show
+    { enabled: true, percentUsed: 60, spent: '30', monthlyLimit: '50', currency: 'USD' },
+  ))
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'five', text: /^5h.*82%$/ })).toBeDefined()
+  expect(await ui.find({ key: 'week', text: /^week.*40%$/ })).toBeDefined()
+  // Per-model weekly limits are left out
+  expect(await ui.find({ type: 'Text', text: '95%' })).toBeUndefined()
+  // The 5-hour bar is yellow past 75%; the weekly one keeps the theme's fill
+  const fills: any[] = (await ui.findAll({ type: 'Box' })).filter((b: any) => b.props?.height === 0.4 && typeof b.props?.width === 'string')
+  expect(fills.map(f => [f.props.width, f.props.backgroundColor])).toEqual([['82%', 'yellow'], ['40%', 'suggestion']])
+  expect(await ui.find({ type: 'Text', text: /left of|\/day|November|October/ })).toBeUndefined()
+  expect(toasts).toEqual([])
+})
+
+test('a subscription in a terminal draws both limits in block characters', async ($, on) => {
+  stubs(on, SUB([{ kind: 'five_hour', percentUsed: 92 }, { kind: 'seven_day', percentUsed: 10 }]))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/w' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const five: any = await ui.find({ type: 'Text', text: /^█{9}░$/ })
+  expect(five.props.color).toBe('red')
+  expect(await ui.find({ type: 'Text', text: /^█░{9}$/ })).toBeDefined()
 })
 
 test('crossing 50% of the month toasts once, and steady figures stay quiet', async ($, on) => {
@@ -76,7 +109,7 @@ test('the band shows session and month with a slim bar on desktop', async ($, on
   const fill: any = (await ui.findAll({ type: 'Box' })).find((b: any) => b.props?.width === '25%')
   expect(fill).toBeDefined()
   expect(fill.props.backgroundColor).toBe('suggestion')
-  expect(await ui.find({ type: 'Text', text: '$190.59 / $750.00 (25%)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '$559.41 left of $750.00' })).toBeDefined()
   // No text-drawn meter any more
   expect(await ui.find({ type: 'Text', text: /[█░]/ })).toBeUndefined()
 })
@@ -109,7 +142,7 @@ test('the band adds a short pace and date, in yellow when the budget runs out ea
   expect(tail).toBeDefined()
   expect(tail.props.color).toBe('yellow')
   // The bar sits in the middle column, between two sides that grow alike, and the rate in the right one
-  expect(await ui.find({ key: "middle", text: /\$190\.59 \/ \$750\.00/ })).toBeDefined()
+  expect(await ui.find({ key: "middle", text: /\$559\.41 left of \$750\.00/ })).toBeDefined()
   // On Oct 5 the bar's label is October
   expect(await ui.find({ key: 'middle', text: /^October/ })).toBeDefined()
   expect(await ui.find({ key: 'right', text: /runs out/ })).toBeDefined()
@@ -182,8 +215,8 @@ test('when the app tool is not connected at startup the month shows within a min
   on('mcp.call', () => (connected ? { value: APP } : { deny: 'not connected' }))
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/w' })
   const ui = await $.ui.mount(BAND)
-  expect(await ui.find({ type: 'Text', text: '$190.59 / $750.00 (25%)' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '$559.41 left of $750.00' })).toBeUndefined()
   connected = true
   await clock.advance(10 * 1000 + 10)
-  expect(await ui.find({ type: 'Text', text: '$190.59 / $750.00 (25%)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '$559.41 left of $750.00' })).toBeDefined()
 })

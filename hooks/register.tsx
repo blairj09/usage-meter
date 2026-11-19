@@ -18,17 +18,17 @@ type History = { cycleStart: number; samples: [number, number][] }
 type Toasted = { cycleStart: number; threshold: number }
 type Forecast = { rate: number; basis: string; runsOutAt: number | null; isEarly: boolean }
 type Tone = 'calm' | 'warn' | 'alert'
+// One bar in the middle of the band: the month's budget, or a plan's 5-hour or weekly limit
+type Meter = { key: string; label: string; percent: number; text: string; color?: string }
 
 // What the band above the prompt draws: set by refresh, drawn by the ui.render hook
 type Band = {
   // This session's cost, "$1.15"
   session: string
-  // The month's extra usage, when the plan has it
-  // name is the current month's, "November", drawn as the bar's label
-  month?: { name: string; percent: number; text: string }
-  // "5h 12% · 7d 40%", when the plan reports rate-limit windows
-  windows: string
-  // "$13/day", or "$42/day · runs out Oct 18" when the budget will run out before the month ends
+  // On a budget plan, one bar: the month's name and what is left, "November ▬▬ $410.25 left of $750.00".
+  // On a subscription, two: "5h ▬▬ 12%" and "week ▬▬ 40%".
+  meters: Meter[]
+  // Budget plans only: "$13/day", or "$42/day · runs out Oct 18" when the budget will run out before the month ends
   forecast: string
   tone: Tone
 }
@@ -37,6 +37,13 @@ let band: Band | null = null
 const money = (v: string | number | undefined, cur = 'USD', digits = 2) =>
   v === undefined ? '?' : (cur === 'USD' ? '$' : cur + ' ') + Number(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 const winName = (w: { name?: string; kind?: string; label?: string }) => w.label ?? w.name ?? ({ five_hour: '5h', seven_day: '7d', spend_limit: 'spend' } as Record<string, string>)[w.kind ?? ''] ?? w.kind ?? 'limit'
+
+type Window = NonNullable<Plan['windows']>[number]
+// The plan's 5-hour and all-models weekly windows, by kind, else by label. Per-model weekly windows are left out.
+const fiveHour = (ws: Window[]) => ws.find(w => w.kind === 'five_hour') ?? ws.find(w => /\b5\s*-?\s*h/i.test(winName(w)))
+const weekly = (ws: Window[]) => ws.find(w => w.kind === 'seven_day') ?? ws.find(w => /week|\b7\s*-?\s*d/i.test(winName(w)) && !/opus|sonnet|haiku|fable|model/i.test(winName(w)))
+// A limit's bar turns yellow at 75% and red at 90%
+const limitColor = (pct: number) => (pct >= 90 ? 'red' : pct >= 75 ? 'yellow' : undefined)
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const startOfMonth = (ms: number) => { const d = new Date(ms); d.setDate(1); d.setHours(0, 0, 0, 0); return d.getTime() }
@@ -113,20 +120,36 @@ async function maybeToast($: any, x: NonNullable<Plan['extraUsage']>, cycleStart
 async function refresh($: any): Promise<boolean> {
   const app = await appPlan($)
   const s = await sessionPlan($)
-  const plan = app ?? s.plan
-  const x = plan.extraUsage
+  const x = app?.extraUsage
+  // The app's windows, else the ones the session's last response reported (in a terminal the app's tool is not there)
+  const windows = (app?.windows?.length ? app.windows : s.plan.windows ?? []).filter(w => w.percentUsed !== undefined)
   const next: Band = {
     session: s.cost !== undefined ? `$${s.cost.toFixed(2)}` : '',
-    windows: (plan.windows ?? []).filter(w => w.percentUsed !== undefined).map(w => `${winName(w)} ${w.percentUsed}%`).join(' · '),
+    meters: [],
     forecast: '',
     tone: 'calm',
   }
-  if (x?.enabled && x.percentUsed !== undefined) next.month = { name: new Date(await $.clock.now()).toLocaleDateString('en-US', { month: 'long' }), percent: x.percentUsed, text: `${money(x.spent, x.currency)} / ${money(x.monthlyLimit, x.currency)} (${x.percentUsed}%)` }
+  // A subscription has 5-hour and weekly limits: show how much of each is used
+  const limits = [['five', '5h', fiveHour(windows)], ['week', 'week', weekly(windows)]] as const
+  for (const [key, label, w] of limits) {
+    if (w) next.meters.push({ key, label, percent: w.percentUsed!, text: `${Math.round(w.percentUsed!)}%`, color: limitColor(w.percentUsed!) })
+  }
+  // A budget plan has no such limits, only the month's budget: show what is left of it
+  const budget = !next.meters.length && x?.enabled && x.percentUsed !== undefined ? x : undefined
+  if (budget) {
+    const left = budget.spent !== undefined && budget.monthlyLimit !== undefined ? Math.max(0, Number(budget.monthlyLimit) - Number(budget.spent)) : undefined
+    next.meters.push({
+      key: 'month',
+      label: new Date(await $.clock.now()).toLocaleDateString('en-US', { month: 'long' }),
+      percent: budget.percentUsed!,
+      text: left !== undefined ? `${money(left, budget.currency)} left of ${money(budget.monthlyLimit, budget.currency)}` : `${budget.percentUsed}%`,
+    })
+  }
   // The forecast and the toasts need the month's spend and limit; they are quiet when they cannot be made
-  if (x?.enabled && x.spent !== undefined && x.monthlyLimit !== undefined) {
+  if (budget && budget.spent !== undefined && budget.monthlyLimit !== undefined) {
     try {
-      const spent = Number(x.spent)
-      const limit = Number(x.monthlyLimit)
+      const spent = Number(budget.spent)
+      const limit = Number(budget.monthlyLimit)
       const now = await $.clock.now()
       const h = await track($, spent)
       const f = forecast(spent, limit, now, h)
@@ -134,16 +157,19 @@ async function refresh($: any): Promise<boolean> {
         next.forecast = 'limit reached'
         next.tone = 'alert'
       } else if (f) {
-        next.forecast = forecastShort(f, x.currency ?? 'USD')
+        next.forecast = forecastShort(f, budget.currency ?? 'USD')
         const daysLeft = f.runsOutAt === null ? Infinity : (f.runsOutAt - now) / DAY
         next.tone = f.isEarly ? (daysLeft <= 7 ? 'alert' : 'warn') : 'calm'
       }
-      if (x.percentUsed !== undefined) await maybeToast($, x, h.cycleStart)
+      await maybeToast($, budget, h.cycleStart)
     } catch {
       // No history this time (the store failed): the figures still show
     }
   }
-  band = next.session || next.month || next.windows ? next : null
+  // The budget's bar takes the forecast's colour
+  const month = next.meters.find(m => m.key === 'month')
+  if (month) month.color = toneColor(next.tone)
+  band = next.session || next.meters.length ? next : null
   $.ui.invalidate('ui.render')
   return app !== null
 }
@@ -188,29 +214,32 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const theirs = await next(e)
     const color = toneColor(b.tone)
-    const left = [b.session, b.windows].filter(Boolean).join(' · ')
-    // Three columns: the session on the left, the month's bar and figures in the middle of the band, the daily rate on the right.
+    // Three columns: the session on the left, the bars in the middle of the band, the daily rate on the right.
     // The two sides grow from zero width alike, so the middle column sits at the band's center whatever their text.
     return (
       <Box flexDirection="column">
         {theirs}
         <Box flexDirection="row" width="100%" columnGap={2} alignItems="center">
           <Box key="left" flexDirection="row" flexGrow={1} width={0}>
-            {left && <Text dimColor wrap="truncate-end">{left}</Text>}
+            {b.session && <Text dimColor wrap="truncate-end">{b.session}</Text>}
           </Box>
-          {b.month && (
-            <Box key="middle" flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
-              <Text dimColor>{b.month.name}</Text>
-              {e.surface === 'terminal' ? (
-                // A terminal draws block characters cleanly
-                <Text dimColor={b.tone === 'calm'} color={color}>{meter(b.month.percent)}</Text>
-              ) : (
-                // Elsewhere the characters draw as hatched boxes in the app's font: a slim bar of two Boxes, in the theme's track and fill
-                <Box key="meter" width={10} height={0.4} flexShrink={0} backgroundColor="userMessageBackground">
-                  <Box width={`${Math.max(0, Math.min(b.month.percent, 100))}%`} height={0.4} backgroundColor={color ?? 'suggestion'} />
+          {b.meters.length > 0 && (
+            <Box key="middle" flexDirection="row" columnGap={3} flexShrink={0} alignItems="center">
+              {b.meters.map(m => (
+                <Box key={m.key} flexDirection="row" columnGap={1} flexShrink={0} alignItems="center">
+                  <Text dimColor>{m.label}</Text>
+                  {e.surface === 'terminal' ? (
+                    // A terminal draws block characters cleanly
+                    <Text dimColor={!m.color} color={m.color}>{meter(m.percent)}</Text>
+                  ) : (
+                    // Elsewhere the characters draw as hatched boxes in the app's font: a slim bar of two Boxes, in the theme's track and fill
+                    <Box key="meter" width={10} height={0.4} flexShrink={0} backgroundColor="userMessageBackground">
+                      <Box width={`${Math.max(0, Math.min(m.percent, 100))}%`} height={0.4} backgroundColor={m.color ?? 'suggestion'} />
+                    </Box>
+                  )}
+                  <Text dimColor>{m.text}</Text>
                 </Box>
-              )}
-              <Text dimColor>{b.month.text}</Text>
+              ))}
             </Box>
           )}
           <Box key="right" flexDirection="row" flexGrow={1} width={0} justifyContent="flex-end">
